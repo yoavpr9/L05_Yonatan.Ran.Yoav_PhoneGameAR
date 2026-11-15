@@ -1,7 +1,7 @@
 // זיהוי אובייקטים: MobileNet מפיק "טביעת אצבע" לכל פריים, ומשווים אותה לדגימות שנסרקו (KNN).
 const Recognizer = (() => {
   const LABELS = ['door', 'ac', 'station', 'bg'];
-  const KEY = 'arfire-scans-v1';
+  const KEY = 'arfire-scans-v2'; // שינוי המספר מוחק סריקות ישנות שנשמרו בטלפונים
   const K = 5;
   let net = null, dim = 256;
   const samples = { door: [], ac: [], station: [], bg: [] };
