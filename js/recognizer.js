@@ -50,6 +50,7 @@ const Recognizer = (() => {
     for (const [, l] of top) votes[l] += 1 / K;
     let best = 'bg';
     for (const l of LABELS) if (votes[l] > votes[best]) best = l;
+    // sim: הדמיון לדגימה הקרובה ביותר (1 = זהה). נמוך = המשחק רואה משהו שלא נסרק בכלל
     return { votes, best, sim: top.length ? top[0][0] : 0, n: top.length };
   }
 

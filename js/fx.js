@@ -103,9 +103,11 @@ const Fx = (() => {
   // ---------- עשן, אש ואדים על המזגן ----------
   const parts = [];
   let spawnAcc = { smoke: 0, fire: 0, steam: 0 };
-  function fireUpdate(dt, lv, S) {
+  function fireUpdate(dt, lv, S, sparksOnly) {
     // lv = {smoke, fire, steam} 0..1 ; S = קנה מידה
-    const rate = { smoke: lv.smoke * 28, fire: lv.fire * 90, steam: lv.steam * 40 };
+    // sparksOnly: האש והעשן עצמם מצוירים ב-flames.js, וכאן נשארים רק גיצים
+    const rate = sparksOnly ? { smoke: 0, fire: lv.fire * 16, steam: 0 }
+      : { smoke: lv.smoke * 28, fire: lv.fire * 90, steam: lv.steam * 40 };
     for (const k of ['smoke', 'fire', 'steam']) {
       spawnAcc[k] += rate[k] * dt;
       while (spawnAcc[k] >= 1) {
@@ -117,17 +119,21 @@ const Fx = (() => {
           age: 0, life: k === 'fire' ? rnd(0.5, 1.1) : rnd(1.6, 3),
           r: (k === 'fire' ? rnd(22, 46) * (0.5 + lv.fire * 0.9) : rnd(16, 30)) * S, rot: rnd(0, 6),
         });
+        if (sparksOnly) {
+          const p = parts[parts.length - 1];
+          p.r = rnd(2.5, 6) * S; p.life = rnd(0.9, 2); p.vx = rnd(-45, 45) * S; p.vy = -rnd(120, 300) * S; p.y = -rnd(20, 120) * S * lv.fire;
+        }
       }
     }
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
       p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.k !== 'fire') p.vx += rnd(-20, 20) * S * dt;
+      if (p.k !== 'fire' || sparksOnly) p.vx += rnd(-60, 60) * S * dt;
       if (p.age >= p.life) parts.splice(i, 1);
     }
     if (parts.length > 700) parts.splice(0, parts.length - 700);
   }
-  function fireDraw(ctx, W, H, pos, lv, S, t) {
+  function fireDraw(ctx, W, H, pos, lv, S, t, sparksOnly) {
     if (!pos.front) return;
     const ax = pos.x, ay = pos.y;
     ctx.save();
@@ -140,7 +146,7 @@ const Fx = (() => {
     ctx.globalCompositeOperation = 'lighter';
     if (lv.fire > 0.02) {
       const gr = (150 + 170 * lv.fire) * S * (0.92 + 0.08 * Math.sin(t * 23));
-      ctx.globalAlpha = Math.min(1, lv.fire * 1.2);
+      ctx.globalAlpha = Math.min(1, lv.fire * 1.2) * (sparksOnly ? 0.55 : 1);
       ctx.drawImage(SPR.glow, ax - gr, ay - gr * 1.1, gr * 2, gr * 2);
     }
     for (const p of parts) {

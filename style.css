@@ -2,9 +2,11 @@
 html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff;
   font-family: system-ui, "Heebo", "Arial Hebrew", Arial, sans-serif;
   user-select: none; -webkit-user-select: none; touch-action: manipulation; }
-#cam, #fx { position: fixed; inset: 0; width: 100%; height: 100%; }
+#cam, #gl, #fx { position: fixed; inset: 0; width: 100%; height: 100%; }
 #cam { object-fit: cover; }
-#fx { pointer-events: none; }
+#gl, #fx { pointer-events: none; }
+#btnEnter { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom)); }
+#btnEnter:active { transform: translateX(-50%) scale(.97); }
 .hidden { display: none !important; }
 
 .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
