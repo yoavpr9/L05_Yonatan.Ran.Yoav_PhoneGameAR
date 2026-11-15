@@ -229,7 +229,15 @@
 
   document.querySelectorAll('.cap').forEach(b => {
     const stop = () => { if (capLabel) { capLabel = null; b.classList.remove('rec'); Recognizer.save(); refreshScanStatus(); } };
-    b.addEventListener('pointerdown', e => { e.preventDefault(); capLabel = b.dataset.label; b.classList.add('rec'); });
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (Date.now() - clearArmed < 4000) { // מצב מחיקה: מוחקים רק את האובייקט שנלחץ
+        Recognizer.clear(b.dataset.label); Recognizer.save(); refreshScanStatus(); disarmClear();
+        $('setupMsg').textContent = `הסריקות של "${NAMES[b.dataset.label]}" נמחקו.`;
+        return;
+      }
+      capLabel = b.dataset.label; b.classList.add('rec');
+    });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => b.addEventListener(ev, stop));
     b.addEventListener('contextmenu', e => e.preventDefault());
   });
@@ -245,13 +253,16 @@
     catch (err) { $('setupMsg').textContent = 'הקובץ לא תקין.'; }
     e.target.value = '';
   };
-  let clearArmed = 0;
+  let clearArmed = 0, clearTimer = 0;
+  function disarmClear() { clearArmed = 0; clearTimeout(clearTimer); $('btnClear').textContent = 'מחק'; }
   $('btnClear').onclick = () => {
-    if (Date.now() - clearArmed < 3000) {
-      Recognizer.clear(); Recognizer.save(); refreshScanStatus(); $('btnClear').textContent = 'מחק הכל'; clearArmed = 0;
+    if (Date.now() - clearArmed < 4000) {
+      Recognizer.clear(); Recognizer.save(); refreshScanStatus(); disarmClear();
+      $('setupMsg').textContent = 'כל הסריקות נמחקו.';
     } else {
-      clearArmed = Date.now(); $('btnClear').textContent = 'בטוח? לחץ שוב';
-      setTimeout(() => { $('btnClear').textContent = 'מחק הכל'; }, 3000);
+      clearArmed = Date.now(); $('btnClear').textContent = 'הכל?';
+      $('setupMsg').textContent = 'מחיקה: לחץ על האובייקט שרוצים למחוק, או שוב על הכפתור כדי למחוק הכל.';
+      clearTimer = setTimeout(disarmClear, 4000);
     }
   };
 
