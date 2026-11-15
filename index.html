@@ -9,6 +9,7 @@
 </head>
 <body>
 <video id="cam" playsinline muted autoplay></video>
+<canvas id="gl"></canvas>
 <canvas id="fx"></canvas>
 
 <!-- מסך פתיחה -->
@@ -44,6 +45,7 @@
 <section id="hud" class="hidden">
   <div class="banner" id="msg"></div>
   <div id="timer">0.0</div>
+  <button id="btnEnter" class="big hidden">נכנסתי לכיתה</button>
   <button id="btnSkip">דלג</button>
 </section>
 
@@ -58,6 +60,8 @@
 <script src="js/orient.js"></script>
 <script src="js/recognizer.js"></script>
 <script src="js/audio.js"></script>
+<script src="vendor/three.min.js"></script>
+<script src="js/flames.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/main.js"></script>
 </body>

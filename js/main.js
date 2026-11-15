@@ -6,12 +6,12 @@
 
   // ----- כיוונון המשחק (אפשר לשנות בחופשיות) -----
   const CFG = {
-    enterSeconds: 5,        // כמה זמן החץ מוצג לפני שממשיכים לבד
     smokeOnlySeconds: 3.5,  // עשן עדין לפני שהלהבה מתחילה
     fireGrowSeconds: 12,    // כמה זמן עד שהלהבה בשיא
     extinguishSeconds: 7,   // כמה זמן לוקח לספרינקלרים לכבות
     voteThreshold: 0.8,     // כמה מה"שכנים" צריכים להסכים שזה האובייקט
-    hitsNeeded: 5,          // כמה זיהויים רצופים נדרשים
+    minSimilarity: 0.82,    // דמיון מינימלי לדגימה שנסרקה (0..1). גבוה יותר = פחות זיהויים שגויים, אבל צריך לכוון מדויק יותר
+    hitsNeeded: 7,          // כמה זיהויים רצופים נדרשים
   };
 
   let W = 0, H = 0, state = 'menu', stateT = 0, gameT = 0;
@@ -24,7 +24,9 @@
     W = window.innerWidth; H = window.innerHeight;
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    Flames.resize(W, H);
   }
+  const gl3d = Flames.init($('gl'));
   window.addEventListener('resize', resize); resize();
 
   const show = (id, on) => $(id).classList.toggle('hidden', !on);
@@ -61,14 +63,14 @@
   function go(s) {
     state = s; stateT = 0; hits = 0;
     show('start', s === 'menu'); show('setup', s === 'setup'); show('win', s === 'win');
-    show('hud', !['menu', 'setup', 'win'].includes(s));
+    show('hud', !['menu', 'setup', 'win'].includes(s)); show('btnEnter', s === 'enter');
     if (s === 'menu') { Sfx.stopAll(); refreshScanStatus(); }
     if (s === 'door') {
       gameT = 0; lv.smoke = lv.fire = lv.steam = 0; acDir = stationDir = doorDir = null;
       Fx.fireReset(); Fx.rainReset(); Sfx.stopAll();
       say('פתח את הדלת: כוון את המצלמה אל ידית הדלת');
     }
-    if (s === 'enter') { doorDir = Orient.forward(); Sfx.door(); say('הדלת נפתחה! עקוב אחרי החץ והיכנס לכיתה'); }
+    if (s === 'enter') { doorDir = Orient.forward(); Sfx.door(); say('הדלת נפתחה! עקוב אחרי החץ, היכנס לכיתה ולחץ "נכנסתי לכיתה"'); }
     if (s === 'sense') { beatPhase = 0; say('החושים שלך מזהירים מסכנה! חפש את מקור הסכנה בחדר'); }
     if (s === 'fire') { acDir = Orient.forward(); Sfx.scan(); say('מצאת את מקור הסכנה: המזגן מעלה עשן!'); }
     if (s === 'break') {
@@ -103,12 +105,15 @@
             lastRes = Recognizer.classify(e);
             const tg = currentTarget();
             if (tg && lastRes.n) {
-              if (lastRes.votes[tg] >= CFG.voteThreshold) hits++; else hits = Math.max(0, hits - 1);
+              const match = lastRes.votes[tg] >= CFG.voteThreshold && lastRes.sim >= CFG.minSimilarity;
+              if (match) hits++; else hits = Math.max(0, hits - 2);
               if (hits >= CFG.hitsNeeded) go(NEXT[state]);
             }
             if (state === 'setup') {
               $('liveGuess').textContent = capLabel ? `מצלם: ${NAMES[capLabel]}`
-                : lastRes.n ? `מזהה: ${NAMES[lastRes.best]} (${Math.round(lastRes.votes[lastRes.best] * 100)}%)` : 'אין דגימות עדיין';
+                : !lastRes.n ? 'אין דגימות עדיין'
+                : lastRes.sim < CFG.minSimilarity ? `לא מזוהה (דמיון ${Math.round(lastRes.sim * 100)}%)`
+                : `מזהה: ${NAMES[lastRes.best]} (דמיון ${Math.round(lastRes.sim * 100)}%)`;
             }
           }
         } catch (e) { console.warn(e); }
@@ -126,6 +131,7 @@
     ctx.clearRect(0, 0, W, H);
     const S = Math.min(W, H) / 400;
     const playing = !['menu', 'setup', 'win'].includes(state);
+    let flamePos = null;
     if (playing) { gameT += dt; $('timer').textContent = gameT.toFixed(1); }
 
     // גודל מסגרת הסריקה על המסך תואם לאזור שנשלח לזיהוי
@@ -139,7 +145,6 @@
 
     if (state === 'enter') {
       Fx.doorArrow(ctx, W, H, Orient.project(doorDir, W, H), t, Math.min(1, stateT * 2));
-      if (stateT > CFG.enterSeconds) go('sense');
     }
 
     // פעימות לב: מואצות עם הזמן וכשמתקרבים למזגן
@@ -172,8 +177,9 @@
       }
       if (playing) {
         const pos = Orient.project(acDir, W, H);
-        Fx.fireUpdate(dt, lv, S);
-        Fx.fireDraw(ctx, W, H, pos, lv, S, t);
+        flamePos = pos;
+        Fx.fireUpdate(dt, lv, S, gl3d);
+        Fx.fireDraw(ctx, W, H, pos, lv, S, t, gl3d);
         Fx.heat(ctx, W, H, lv.fire, t);
         if (state === 'extinguish') Fx.pointer(ctx, W, H, pos, '#ff8a1a', t);
         Sfx.fire(lv.fire + lv.smoke * 0.15);
@@ -189,6 +195,7 @@
       Fx.rain(ctx, W, H, r, t, dt); Sfx.water(r);
     }
 
+    Flames.render(flamePos, lv, S, t);
     if (currentTarget()) Fx.reticle(ctx, W, H, ret, hits / CFG.hitsNeeded, t);
     requestAnimationFrame(frame);
   }
@@ -204,7 +211,7 @@
   $('btnSetup').onclick = () => begin('setup');
   $('btnBack').onclick = () => { Recognizer.save(); go('menu'); };
   $('btnSkip').onclick = () => { if (NEXT[state]) go(NEXT[state]); };
-  $('hud').addEventListener('click', e => { if (state === 'enter' && e.target.id !== 'btnSkip' && stateT > 0.8) go('sense'); });
+  $('btnEnter').onclick = () => { if (state === 'enter') go('sense'); };
 
   document.querySelectorAll('.cap').forEach(b => {
     const stop = () => { if (capLabel) { capLabel = null; b.classList.remove('rec'); Recognizer.save(); refreshScanStatus(); } };
