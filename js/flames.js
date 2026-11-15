@@ -102,7 +102,7 @@ const Flames = (() => {
 
   function place(m, x, baseY, w, h) { m.scale.set(w, h, 1); m.position.set(x, baseY - h / 2, 0); }
 
-  // pos: מיקום המזגן על המסך, lv: {smoke, fire, steam} בטווח 0..1, S: קנה מידה
+  // pos: מיקום המקרן על המסך, lv: {smoke, fire, steam} בטווח 0..1, S: קנה מידה
   function render(pos, lv, S, t) {
     if (!ok) return;
     const show = pos && pos.front;
