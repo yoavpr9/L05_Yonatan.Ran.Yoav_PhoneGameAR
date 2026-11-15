@@ -100,7 +100,7 @@ const Fx = (() => {
     ctx.restore();
   }
 
-  // ---------- עשן, אש ואדים על המזגן ----------
+  // ---------- עשן, אש ואדים על המקרן ----------
   const parts = [];
   let spawnAcc = { smoke: 0, fire: 0, steam: 0 };
   function fireUpdate(dt, lv, S, sparksOnly) {

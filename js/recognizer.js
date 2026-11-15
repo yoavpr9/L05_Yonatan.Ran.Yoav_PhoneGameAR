@@ -1,6 +1,6 @@
 // זיהוי אובייקטים: MobileNet מפיק "טביעת אצבע" לכל פריים, ומשווים אותה לדגימות שנסרקו (KNN).
 const Recognizer = (() => {
-  const LABELS = ['door', 'ac', 'station', 'bg'];
+  const LABELS = ['door', 'ac', 'station', 'bg']; // 'ac' הוא מקור הסכנה (המקרן). השם הפנימי נשאר מהגרסה שבה זה היה מזגן
   const KEY = 'arfire-scans-v2'; // שינוי המספר מוחק סריקות ישנות שנשמרו בטלפונים
   const K = 5;
   let net = null, dim = 256;
@@ -87,16 +87,21 @@ const Recognizer = (() => {
   }
   function save() { try { localStorage.setItem(KEY, serialize()); } catch (e) { console.warn(e); } }
   async function loadScans() {
-    // קודם סריקות שנשמרו בטלפון הזה, אחרת הקובץ שבריפו (scans/scans.json)
-    try {
-      const ls = localStorage.getItem(KEY);
-      if (ls) { deserialize(ls); if (Object.values(counts()).some(n => n)) return 'local'; }
-    } catch (e) { console.warn(e); }
+    // טוענים את הקובץ שבריפו (scans/scans.json), ואז לכל אובייקט שנסרק בטלפון הזה
+    // הסריקות המקומיות מחליפות את אלה שבריפו. אובייקט שלא נסרק בטלפון נשאר מהריפו.
     try {
       const r = await fetch('scans/scans.json', { cache: 'no-cache' });
-      if (r.ok) { deserialize(await r.json()); return 'repo'; }
+      if (r.ok) deserialize(await r.json());
     } catch (e) {}
-    return 'none';
+    try {
+      const ls = localStorage.getItem(KEY);
+      if (ls) {
+        const o = JSON.parse(ls);
+        if (o && o.dim === dim && o.labels) {
+          for (const l of LABELS) if (o.labels[l]) { const a = fromB64(o.labels[l]); if (a.length) samples[l] = a; }
+        }
+      }
+    } catch (e) { console.warn(e); }
   }
 
   return { LABELS, CROP, load, embed, classify, add, counts, clear, ready, save, serialize, deserialize };
