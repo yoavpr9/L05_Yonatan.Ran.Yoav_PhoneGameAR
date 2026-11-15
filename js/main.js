@@ -12,12 +12,16 @@
     voteThreshold: 0.8,     // כמה מה"שכנים" צריכים להסכים שזה האובייקט
     minSimilarity: 0.82,    // דמיון מינימלי לדגימה שנסרקה (0..1). גבוה יותר = פחות זיהויים שגויים, אבל צריך לכוון מדויק יותר
     hitsNeeded: 7,          // כמה זיהויים רצופים נדרשים
+    acHoldSeconds: 1.5,     // כמה זמן האש נשארת על המסך אחרי שהמזגן יצא מהפריים
   };
 
   let W = 0, H = 0, state = 'menu', stateT = 0, gameT = 0;
   let camOn = false, modelOn = false, hits = 0, lastRes = null, capLabel = null;
   let doorDir, acDir, stationDir, glassBox, fire0 = 0, beatPhase = 0, beatEnv = 0;
   const lv = { smoke: 0, fire: 0, steam: 0 };
+  // האש מוצגת רק כשהמצלמה באמת רואה את המזגן. כך היא לא "נודדת" לקיר אחר כשהולכים בחדר
+  let acSeenAt = 0, acLost = false, acVis = 1, extT = 0;
+  const acGate = () => modelOn && Recognizer.counts().ac > 0;
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -72,14 +76,14 @@
     }
     if (s === 'enter') { doorDir = Orient.forward(); Sfx.door(); say('הדלת נפתחה! עקוב אחרי החץ, היכנס לכיתה ולחץ "נכנסתי לכיתה"'); }
     if (s === 'sense') { beatPhase = 0; say('החושים שלך מזהירים מסכנה! חפש את מקור הסכנה בחדר'); }
-    if (s === 'fire') { acDir = Orient.forward(); Sfx.scan(); say('מצאת את מקור הסכנה: המזגן מעלה עשן!'); }
+    if (s === 'fire') { acDir = Orient.forward(); acSeenAt = performance.now(); acLost = false; acVis = 1; Sfx.scan(); say('מצאת את מקור הסכנה: המזגן מעלה עשן!'); }
     if (s === 'break') {
       stationDir = Orient.forward(); glassBox = Fx.glassBuild(W, H); Sfx.scan();
       say('שוברים את הזכוכית ומושכים בידית...');
       setTimeout(() => state === 'break' && Sfx.glass(), 500);
       setTimeout(() => state === 'break' && Sfx.lever(), 1600);
     }
-    if (s === 'extinguish') { fire0 = lv.fire; Sfx.alarm(true); say('הספרינקלרים פועלים! חזור אל המזגן וראה את האש נכבית'); }
+    if (s === 'extinguish') { fire0 = lv.fire; extT = 0; Sfx.alarm(true); say('הספרינקלרים פועלים! חזור אל המזגן וראה את האש נכבית'); }
     if (s === 'win') {
       Sfx.stopAll(); Sfx.win();
       $('winTime').textContent = `כיבית את השריפה תוך ${gameT.toFixed(1)} שניות`;
@@ -87,7 +91,7 @@
   }
 
   const TARGET = { door: 'door', sense: 'ac', fire: 'station' };
-  const NEXT = { door: 'enter', enter: 'sense', sense: 'fire', fire: 'break' };
+  const NEXT = { door: 'enter', enter: 'sense', sense: 'fire', fire: 'break', extinguish: 'win' };
   function currentTarget() {
     if (state === 'fire' && stateT < CFG.smokeOnlySeconds) return null; // קודם רואים את העשן
     return TARGET[state] || null;
@@ -96,13 +100,17 @@
   // ----- לולאת הזיהוי -----
   async function recognizeLoop() {
     for (;;) {
-      const scanning = state === 'setup' || currentTarget();
+      const scanning = state === 'setup' || currentTarget() || (acDir && ['fire', 'break', 'extinguish'].includes(state));
       if (camOn && modelOn && scanning) {
         try {
           const e = await Recognizer.embed(video);
           if (e) {
             if (state === 'setup' && capLabel) { Recognizer.add(capLabel, e); refreshScanStatus(); }
             lastRes = Recognizer.classify(e);
+            if (acDir && lastRes.votes.ac >= 0.6 && lastRes.sim >= CFG.minSimilarity - 0.06) {
+              if (acLost) { acDir = Orient.forward(); acLost = false; } // חזרנו למזגן: מעגנים את האש מחדש
+              acSeenAt = performance.now();
+            }
             const tg = currentTarget();
             if (tg && lastRes.n) {
               const match = lastRes.votes[tg] >= CFG.voteThreshold && lastRes.sim >= CFG.minSimilarity;
@@ -123,6 +131,7 @@
   }
 
   // ----- לולאת הציור -----
+  const shown = { smoke: 0, fire: 0, steam: 0 };
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -168,20 +177,25 @@
         if (state === 'fire' && stateT > CFG.smokeOnlySeconds && stateT - dt <= CFG.smokeOnlySeconds)
           say('המזגן עולה באש! רוץ לעמדת כיבוי האש וסרוק אותה');
       }
+      if (acGate()) {
+        if (now - acSeenAt > CFG.acHoldSeconds * 1000) acLost = true;
+        acVis = Math.max(0, Math.min(1, acVis + (acLost ? -dt / 0.35 : dt / 0.35)));
+      } else { acLost = false; acVis = 1; }
       if (state === 'extinguish') {
-        const u = Math.min(1, stateT / CFG.extinguishSeconds);
+        if (!acLost) extT += dt;   // האש נכבית מול העיניים: השעון מתקדם רק כשרואים את המזגן
+        const u = Math.min(1, extT / CFG.extinguishSeconds);
         lv.fire = fire0 * (1 - u) * (1 - u);
         lv.smoke = Math.max(0, 1 - u * 1.3);
-        lv.steam = Math.sin(Math.min(1, stateT / (CFG.extinguishSeconds + 1.5)) * Math.PI);
-        if (stateT > CFG.extinguishSeconds + 2) go('win');
+        lv.steam = Math.sin(Math.min(1, extT / (CFG.extinguishSeconds + 1.5)) * Math.PI);
+        if (extT > CFG.extinguishSeconds + 2) go('win');
       }
       if (playing) {
         const pos = Orient.project(acDir, W, H);
         flamePos = pos;
-        Fx.fireUpdate(dt, lv, S, gl3d);
-        Fx.fireDraw(ctx, W, H, pos, lv, S, t, gl3d);
+        shown.smoke = lv.smoke * acVis; shown.fire = lv.fire * acVis; shown.steam = lv.steam * acVis;
+        Fx.fireUpdate(dt, shown, S, gl3d);
+        Fx.fireDraw(ctx, W, H, pos, shown, S, t, gl3d);
         Fx.heat(ctx, W, H, lv.fire, t);
-        if (state === 'extinguish') Fx.pointer(ctx, W, H, pos, '#ff8a1a', t);
         Sfx.fire(lv.fire + lv.smoke * 0.15);
       }
     }
@@ -195,7 +209,7 @@
       Fx.rain(ctx, W, H, r, t, dt); Sfx.water(r);
     }
 
-    Flames.render(flamePos, lv, S, t);
+    Flames.render(flamePos, shown, S, t);
     if (currentTarget()) Fx.reticle(ctx, W, H, ret, hits / CFG.hitsNeeded, t);
     requestAnimationFrame(frame);
   }
